@@ -2,56 +2,97 @@ package zorm
 
 import (
 	"fmt"
+	"github.com/caixr9527/zorm/render"
+	"html/template"
 	"log"
 	"net/http"
+	"strings"
+	"sync"
 )
 
 const ANY = "ANY"
 
-type HandleFunc func(ctx *Context)
+type HandlerFunc func(ctx *Context)
+
+type MiddlewareFunc func(handlerFunc HandlerFunc) HandlerFunc
 
 type routerGroup struct {
-	name             string
-	handlerFuncMap   map[string]map[string]HandleFunc
-	handlerMethodMap map[string][]string
-	treeNode         *treeNode
+	name               string
+	handlerFuncMap     map[string]map[string]HandlerFunc
+	middlewaresFuncMap map[string]map[string][]MiddlewareFunc
+	handlerMethodMap   map[string][]string
+	treeNode           *treeNode
+	middlewares        []MiddlewareFunc
 }
 
-func (r *routerGroup) handle(name string, method string, handleFunc HandleFunc) {
+func (r *routerGroup) Use(middlewareFunc ...MiddlewareFunc) {
+	r.middlewares = append(r.middlewares, middlewareFunc...)
+}
+
+func (r *routerGroup) methodHandle(name string, method string, h HandlerFunc, ctx *Context) {
+	// group pre
+	if r.middlewares != nil {
+		for _, middlewareFunc := range r.middlewares {
+			h = middlewareFunc(h)
+		}
+	}
+	// router level
+	middlewareFuncs := r.middlewaresFuncMap[name][method]
+	if middlewareFuncs != nil {
+		for _, middlewareFunc := range middlewareFuncs {
+			h = middlewareFunc(h)
+		}
+	}
+	h(ctx)
+}
+
+func (r *routerGroup) handle(name string, method string, handleFunc HandlerFunc, middlewareFunc ...MiddlewareFunc) {
+	if !strings.HasPrefix(name, "/") {
+		name = "/" + name
+	}
 	_, ok := r.handlerFuncMap[name]
 	if !ok {
-		r.handlerFuncMap[name] = make(map[string]HandleFunc)
+		r.handlerFuncMap[name] = make(map[string]HandlerFunc)
+		r.middlewaresFuncMap[name] = make(map[string][]MiddlewareFunc)
 	}
 	_, ok = r.handlerFuncMap[name][method]
 	if ok {
 		panic("Duplicate routing [" + name + "]")
 	}
 	r.handlerFuncMap[name][method] = handleFunc
-
+	r.middlewaresFuncMap[name][method] = append(r.middlewaresFuncMap[name][method], middlewareFunc...)
 	r.treeNode.Put(name)
 }
 
-func (r *routerGroup) Any(name string, handleFunc HandleFunc) {
-	r.handle(name, ANY, handleFunc)
+func (r *routerGroup) Any(name string, handleFunc HandlerFunc, middlewareFunc ...MiddlewareFunc) {
+	r.handle(name, ANY, handleFunc, middlewareFunc...)
 }
 
-func (r *routerGroup) Get(name string, handleFunc HandleFunc) {
-	r.handle(name, http.MethodGet, handleFunc)
-
-}
-
-func (r *routerGroup) Post(name string, handleFunc HandleFunc) {
-	r.handle(name, http.MethodPost, handleFunc)
+func (r *routerGroup) Get(name string, handleFunc HandlerFunc, middlewareFunc ...MiddlewareFunc) {
+	r.handle(name, http.MethodGet, handleFunc, middlewareFunc...)
 
 }
 
-func (r *routerGroup) Put(name string, handleFunc HandleFunc) {
-	r.handle(name, http.MethodPut, handleFunc)
+func (r *routerGroup) Post(name string, handleFunc HandlerFunc, middlewareFunc ...MiddlewareFunc) {
+	r.handle(name, http.MethodPost, handleFunc, middlewareFunc...)
 
 }
 
-func (r *routerGroup) Delete(name string, handleFunc HandleFunc) {
-	r.handle(name, http.MethodDelete, handleFunc)
+func (r *routerGroup) Put(name string, handleFunc HandlerFunc, middlewareFunc ...MiddlewareFunc) {
+	r.handle(name, http.MethodPut, handleFunc, middlewareFunc...)
+
+}
+
+func (r *routerGroup) Delete(name string, handleFunc HandlerFunc, middlewareFunc ...MiddlewareFunc) {
+	r.handle(name, http.MethodDelete, handleFunc, middlewareFunc...)
+}
+
+func (r *routerGroup) Patch(name string, handleFunc HandlerFunc, middlewareFunc ...MiddlewareFunc) {
+	r.handle(name, http.MethodPatch, handleFunc, middlewareFunc...)
+}
+
+func (r *routerGroup) Options(name string, handleFunc HandlerFunc, middlewareFunc ...MiddlewareFunc) {
+	r.handle(name, http.MethodOptions, handleFunc, middlewareFunc...)
 }
 
 type router struct {
@@ -60,10 +101,11 @@ type router struct {
 
 func (r *router) Group(name string) *routerGroup {
 	routerGroup := &routerGroup{
-		name:             name,
-		handlerFuncMap:   make(map[string]map[string]HandleFunc),
-		handlerMethodMap: make(map[string][]string),
-		treeNode:         &treeNode{name: "/", children: make([]*treeNode, 0)},
+		name:               name,
+		handlerFuncMap:     make(map[string]map[string]HandlerFunc),
+		middlewaresFuncMap: make(map[string]map[string][]MiddlewareFunc),
+		handlerMethodMap:   make(map[string][]string),
+		treeNode:           &treeNode{name: "/", children: make([]*treeNode, 0)},
 	}
 	r.routerGroups = append(r.routerGroups, routerGroup)
 	return routerGroup
@@ -71,32 +113,61 @@ func (r *router) Group(name string) *routerGroup {
 
 type Engine struct {
 	router
+	funcMap    template.FuncMap
+	HTMLRender render.HTMLRender
+	pool       sync.Pool
 }
 
 func New() *Engine {
-	return &Engine{
+	engine := &Engine{
 		router: router{},
 	}
+	engine.pool.New = func() any {
+		return engine.allocateContext()
+	}
+	return engine
+}
+
+func (e *Engine) allocateContext() any {
+	return &Context{engine: e}
+}
+
+func (e *Engine) SetFuncMap(funcMap template.FuncMap) {
+	e.funcMap = funcMap
+}
+
+func (e *Engine) LoadTemplate(pattern string) {
+	t := template.Must(template.New("").Funcs(e.funcMap).ParseGlob(pattern))
+	e.SetHTMLTemplate(t)
+}
+
+func (e *Engine) SetHTMLTemplate(t *template.Template) {
+	e.HTMLRender = render.HTMLRender{Template: t}
 }
 
 func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx := e.pool.Get().(*Context)
+	ctx.W = w
+	ctx.R = r
+	e.httpRequestHandler(ctx, w, r)
+	e.pool.Put(ctx)
+}
+
+func (e *Engine) httpRequestHandler(ctx *Context, w http.ResponseWriter, r *http.Request) {
 	method := r.Method
 	for _, group := range e.routerGroups {
-		routerName := SubStringLast(r.RequestURI, "/"+group.name)
+		routerName := SubStringLast(r.URL.Path, "/"+group.name)
 		node := group.treeNode.Get(routerName)
 		if node != nil && node.isEnd {
-			ctx := &Context{
-				W: w,
-				R: r,
-			}
+
 			handle, ok := group.handlerFuncMap[node.routerName][ANY]
 			if ok {
-				handle(ctx)
+				group.methodHandle(node.routerName, ANY, handle, ctx)
 				return
 			}
 			handle, ok = group.handlerFuncMap[node.routerName][method]
 			if ok {
-				handle(ctx)
+				group.methodHandle(node.routerName, method, handle, ctx)
 				return
 			}
 			w.WriteHeader(http.StatusMethodNotAllowed)
