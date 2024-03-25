@@ -1,23 +1,28 @@
 package zorm
 
 import (
+	"encoding/json"
 	"errors"
 	"github.com/caixr9527/zorm/render"
 	"html/template"
+	"io"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 )
 
 const defaultMaxMemory = 32 << 20
 
 type Context struct {
-	W           http.ResponseWriter
-	R           *http.Request
-	engine      *Engine
-	queryParams url.Values
-	formParams  url.Values
+	W                     http.ResponseWriter
+	R                     *http.Request
+	engine                *Engine
+	queryParams           url.Values
+	formParams            url.Values
+	DisallowUnknownFields bool
 }
 
 func (c *Context) GetQuery(key string) string {
@@ -101,6 +106,52 @@ func (c *Context) get(params map[string][]string, key string) (map[string]string
 		}
 	}
 	return dicts, exist
+}
+
+func (c *Context) FormFile(name string) *multipart.FileHeader {
+	file, header, err := c.R.FormFile(name)
+	if err != nil {
+		log.Println(err)
+	}
+	defer file.Close()
+	return header
+}
+
+func (c *Context) FormFiles(name string) ([]*multipart.FileHeader, error) {
+	multipartForm, err := c.MultipartForm()
+	return multipartForm.File[name], err
+}
+
+func (c *Context) MultipartForm() (*multipart.Form, error) {
+	err := c.R.ParseMultipartForm(defaultMaxMemory)
+	return c.R.MultipartForm, err
+}
+
+func (c *Context) SaveUploadedFile(file *multipart.FileHeader, dst string) error {
+	src, err := file.Open()
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, src)
+	return err
+}
+
+func (c *Context) DealJson(obj any) error {
+	body := c.R.Body
+	if body == nil {
+		return errors.New("invalid request")
+	}
+	decoder := json.NewDecoder(body)
+	if c.DisallowUnknownFields {
+		decoder.DisallowUnknownFields()
+	}
+	return decoder.Decode(obj)
 }
 
 func (c *Context) HTML(status int, html string) error {

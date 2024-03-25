@@ -16,8 +16,9 @@ func Log(next zorm.HandlerFunc) zorm.HandlerFunc {
 }
 
 type User struct {
-	Name string `xml:"name"`
-	Age  int    `xml:"age"`
+	Name      string   `xml:"name" json:"name"`
+	Age       int      `xml:"age" json:"age"`
+	Addresses []string `json:"addresses"`
 }
 
 func main() {
@@ -139,7 +140,34 @@ func main() {
 
 	group.Post("/formPost", func(ctx *zorm.Context) {
 		m, _ := ctx.GetPostFormMap("user")
+		//file := ctx.FormFile("file")
+		//err := ctx.SaveUploadedFile(file, "./upload/"+file.Filename)
+		//if err != nil {
+		//	log.Println(err)
+		//}
+		//form, err := ctx.MultipartForm()
+		//if err != nil {
+		//	log.Println(err)
+		//}
+		//fileMap := form.File
+		//headers := fileMap["file"]
+		headers, _ := ctx.FormFiles("file")
+		for _, file := range headers {
+			ctx.SaveUploadedFile(file, "./upload/"+file.Filename)
+		}
+
 		ctx.JSON(http.StatusOK, m)
+	})
+
+	group.Post("/jsonParam", func(ctx *zorm.Context) {
+		user := &User{}
+		err := ctx.DealJson(user)
+		if err == nil {
+			ctx.JSON(http.StatusOK, user)
+		} else {
+			log.Println(err)
+		}
+
 	})
 
 	engine.Run()
