@@ -17,8 +17,8 @@ func Log(next zorm.HandlerFunc) zorm.HandlerFunc {
 
 type User struct {
 	Name      string   `xml:"name" json:"name"`
-	Age       int      `xml:"age" json:"age"`
-	Addresses []string `json:"addresses"`
+	Age       int      `xml:"age" json:"age" required:"true"`
+	Addresses []string `json:"addresses" required:"true"`
 }
 
 func main() {
@@ -161,6 +161,9 @@ func main() {
 
 	group.Post("/jsonParam", func(ctx *zorm.Context) {
 		user := &User{}
+		//user := make([]*User, 0)
+		ctx.IsValidate = true
+		ctx.DisallowUnknownFields = true
 		err := ctx.DealJson(user)
 		if err == nil {
 			ctx.JSON(http.StatusOK, user)

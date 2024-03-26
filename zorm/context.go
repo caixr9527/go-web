@@ -3,6 +3,7 @@ package zorm
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/caixr9527/zorm/render"
 	"html/template"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"reflect"
 	"strings"
 )
 
@@ -23,6 +25,7 @@ type Context struct {
 	queryParams           url.Values
 	formParams            url.Values
 	DisallowUnknownFields bool
+	IsValidate            bool
 }
 
 func (c *Context) GetQuery(key string) string {
@@ -151,7 +154,48 @@ func (c *Context) DealJson(obj any) error {
 	if c.DisallowUnknownFields {
 		decoder.DisallowUnknownFields()
 	}
-	return decoder.Decode(obj)
+	if c.IsValidate {
+		err := validateParam(obj, decoder)
+		if err != nil {
+			return err
+		}
+	} else {
+		return decoder.Decode(obj)
+	}
+	return nil
+}
+
+func validateParam(obj any, decoder *json.Decoder) error {
+	valueOf := reflect.ValueOf(obj)
+	if valueOf.Kind() != reflect.Pointer {
+		return errors.New("no ptr type")
+	}
+	elem := valueOf.Elem().Interface()
+	of := reflect.ValueOf(elem)
+	switch of.Kind() {
+	case reflect.Struct:
+		mapValue := make(map[string]interface{})
+		_ = decoder.Decode(&mapValue)
+		for i := 0; i < of.NumField(); i++ {
+			field := of.Type().Field(i)
+			name := field.Name
+			jsonName := field.Tag.Get("json")
+			if jsonName != "" {
+				name = jsonName
+			}
+			required := field.Tag.Get("required")
+			value := mapValue[name]
+			if value == nil && required == "true" {
+				return errors.New(fmt.Sprintf("field [%s] is not exist, because [%s] is required", jsonName, jsonName))
+			}
+		}
+
+		marshal, _ := json.Marshal(mapValue)
+		_ = json.Unmarshal(marshal, obj)
+	default:
+		_ = decoder.Decode(obj)
+	}
+	return nil
 }
 
 func (c *Context) HTML(status int, html string) error {
