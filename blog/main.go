@@ -24,6 +24,7 @@ type User struct {
 func main() {
 	engine := zorm.New()
 	group := engine.Group("user")
+	group.Use(zorm.Logging)
 
 	group.Use(func(next zorm.HandlerFunc) zorm.HandlerFunc {
 		return func(ctx *zorm.Context) {
@@ -164,7 +165,18 @@ func main() {
 		user := make([]User, 0)
 		ctx.IsValidate = true
 		ctx.DisallowUnknownFields = true
-		err := ctx.DealJson(&user)
+		err := ctx.BindJson(&user)
+		if err == nil {
+			ctx.JSON(http.StatusOK, user)
+		} else {
+			log.Println(err)
+		}
+
+	})
+
+	group.Post("/xmlParam", func(ctx *zorm.Context) {
+		user := &User{}
+		err := ctx.BindXML(user)
 		if err == nil {
 			ctx.JSON(http.StatusOK, user)
 		} else {

@@ -1,11 +1,9 @@
 package zorm
 
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
+	"github.com/caixr9527/zorm/binding"
 	"github.com/caixr9527/zorm/render"
-	"github.com/go-playground/validator/v10"
 	"html/template"
 	"io"
 	"log"
@@ -13,7 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"reflect"
 	"strings"
 )
 
@@ -27,6 +24,7 @@ type Context struct {
 	formParams            url.Values
 	DisallowUnknownFields bool
 	IsValidate            bool
+	StatusCode            int
 }
 
 func (c *Context) GetQuery(key string) string {
@@ -146,145 +144,15 @@ func (c *Context) SaveUploadedFile(file *multipart.FileHeader, dst string) error
 	return err
 }
 
-func (c *Context) DealJson(obj any) error {
-	body := c.R.Body
-	if body == nil {
-		return errors.New("invalid request")
-	}
-	decoder := json.NewDecoder(body)
-	// todo 两个同时开启需要同时支持 同时开启DisallowUnknownFields会失效
-	if c.DisallowUnknownFields {
-		decoder.DisallowUnknownFields()
-	}
-	if c.IsValidate {
-		err := validateParam(obj, decoder)
-		if err != nil {
-			return err
-		}
-	} else {
-		err := decoder.Decode(obj)
-		if err != nil {
-			return err
-		}
-
-	}
-	return validate(obj)
+func (c *Context) BindJson(obj any) error {
+	jsonBinding := binding.JSON
+	jsonBinding.DisallowUnknownFields = true
+	jsonBinding.IsValidate = true
+	return c.MustBindWith(obj, jsonBinding)
 }
 
-type SliceValidationError []error
-
-func (err SliceValidationError) Error() string {
-	n := len(err)
-	switch n {
-	case 0:
-		return ""
-	default:
-		var b strings.Builder
-		if err[0] != nil {
-			fmt.Fprintf(&b, "[%d]:%s", 0, err[0].Error())
-		}
-		if n > 1 {
-			for i := 0; i < n; i++ {
-				if err[i] != nil {
-					b.WriteString("\n")
-					fmt.Fprintf(&b, "[%d]:%s", i, err[0].Error())
-				}
-			}
-		}
-		return b.String()
-	}
-}
-
-func validate(obj any) error {
-	of := reflect.ValueOf(obj)
-	switch of.Kind() {
-	case reflect.Pointer:
-		return validate(of.Elem().Interface())
-	case reflect.Struct:
-		return validateStruct(obj)
-	case reflect.Slice, reflect.Array:
-		count := of.Len()
-		sliceValidationError := make(SliceValidationError, 0)
-		for i := 0; i < count; i++ {
-			if err := validateStruct(of.Index(i).Interface()); err != nil {
-				sliceValidationError = append(sliceValidationError, err)
-			}
-		}
-		return sliceValidationError
-	}
-	return nil
-}
-
-func validateStruct(obj any) error {
-	return validator.New().Struct(obj)
-}
-
-func validateParam(obj any, decoder *json.Decoder) error {
-	valueOf := reflect.ValueOf(obj)
-	if valueOf.Kind() != reflect.Pointer {
-		return errors.New("no ptr type")
-	}
-	elem := valueOf.Elem().Interface()
-	of := reflect.ValueOf(elem)
-	switch of.Kind() {
-	case reflect.Struct:
-		return checkParam(obj, decoder, of)
-	case reflect.Slice, reflect.Array:
-		elem := of.Type().Elem()
-		if elem.Kind() == reflect.Struct {
-			return checkParamSlice(elem, obj, decoder)
-		}
-		// todo 指针类型支持
-	default:
-		_ = decoder.Decode(obj)
-	}
-	return nil
-}
-
-func checkParamSlice(of reflect.Type, obj any, decoder *json.Decoder) error {
-	mapValue := make([]map[string]interface{}, 0)
-	_ = decoder.Decode(&mapValue)
-	for i := 0; i < of.NumField(); i++ {
-		field := of.Field(i)
-		name := field.Name
-		jsonName := field.Tag.Get("json")
-		if jsonName != "" {
-			name = jsonName
-		}
-		required := field.Tag.Get("required")
-		for _, v := range mapValue {
-			value := v[name]
-			if value == nil && required == "true" {
-				return errors.New(fmt.Sprintf("field [%s] is not exist, because [%s] is required", jsonName, jsonName))
-			}
-		}
-	}
-
-	marshal, _ := json.Marshal(mapValue)
-	_ = json.Unmarshal(marshal, obj)
-	return nil
-}
-
-func checkParam(obj any, decoder *json.Decoder, of reflect.Value) error {
-	mapValue := make(map[string]interface{})
-	_ = decoder.Decode(&mapValue)
-	for i := 0; i < of.NumField(); i++ {
-		field := of.Type().Field(i)
-		name := field.Name
-		jsonName := field.Tag.Get("json")
-		if jsonName != "" {
-			name = jsonName
-		}
-		required := field.Tag.Get("required")
-		value := mapValue[name]
-		if value == nil && required == "true" {
-			return errors.New(fmt.Sprintf("field [%s] is not exist, because [%s] is required", jsonName, jsonName))
-		}
-	}
-
-	marshal, _ := json.Marshal(mapValue)
-	_ = json.Unmarshal(marshal, obj)
-	return nil
+func (c *Context) BindXML(obj any) error {
+	return c.MustBindWith(obj, binding.XML)
 }
 
 func (c *Context) HTML(status int, html string) error {
@@ -367,8 +235,21 @@ func (c *Context) String(status int, format string, values ...any) error {
 
 func (c *Context) Render(statusCode int, r render.Render) error {
 	err := r.Render(c.W)
+	c.StatusCode = statusCode
 	if statusCode != http.StatusOK {
 		c.W.WriteHeader(statusCode)
 	}
 	return err
+}
+
+func (c *Context) MustBindWith(obj any, bind binding.Binding) error {
+	if err := c.ShouldBindWith(obj, bind); err != nil {
+		c.W.WriteHeader(http.StatusBadRequest)
+		return err
+	}
+	return nil
+}
+
+func (c *Context) ShouldBindWith(obj any, bind binding.Binding) error {
+	return bind.Bind(c.R, obj)
 }
