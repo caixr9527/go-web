@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/caixr9527/zorm"
+	zormlog "github.com/caixr9527/zorm/log"
 	"log"
 	"net/http"
 )
@@ -160,12 +161,16 @@ func main() {
 		ctx.JSON(http.StatusOK, m)
 	})
 
+	logger := zormlog.Default()
 	group.Post("/jsonParam", func(ctx *zorm.Context) {
 		//user := &User{}
 		user := make([]User, 0)
 		ctx.IsValidate = true
 		ctx.DisallowUnknownFields = true
 		err := ctx.BindJson(&user)
+		logger.Info("info")
+		logger.Debug("debug")
+		logger.Error("error")
 		if err == nil {
 			ctx.JSON(http.StatusOK, user)
 		} else {
