@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/caixr9527/zorm"
 	zormlog "github.com/caixr9527/zorm/log"
+	"github.com/caixr9527/zorm/zerror"
 	"log"
 	"net/http"
 )
@@ -202,5 +203,37 @@ func main() {
 
 	})
 
+	group.Get("/errorTest", func(ctx *zorm.Context) {
+		zError := zerror.Default()
+		zError.Result(func(zError *zerror.ZError) {
+			ctx.Logger.Info(zError.Error())
+			ctx.JSON(http.StatusInternalServerError, nil)
+		})
+		a(1, zError)
+		//b(1, zError)
+		//c(1, zError)
+	})
+
 	engine.Run()
+}
+
+func a(i int, zError *zerror.ZError) {
+	if i == 1 {
+		zError.Put(zError)
+	}
+
+}
+
+func b(i int, zError *zerror.ZError) {
+	if i == 1 {
+		zError.Put(zError)
+	}
+
+}
+
+func c(i int, zError *zerror.ZError) {
+	if i == 1 {
+		zError.Put(zError)
+	}
+
 }

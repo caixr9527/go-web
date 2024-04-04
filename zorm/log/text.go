@@ -27,13 +27,13 @@ func (f *TextFormatter) Format(param *LoggingFormatParam) string {
 	if param.IsColor {
 		levelColor := f.LevelColor(param.Level)
 		msgColor := f.MsgColor(param.Level)
-		return fmt.Sprintf("[zorm] | %s [%s] %s | %v  | %s %s%#v %s ｜ %s",
+		return fmt.Sprintf("[zorm] | %s [%s] %s | %v  | %s %s%v %s ｜ %s",
 			levelColor, param.Level.Level(), Reset,
 			now.Format("2006/01/02 - 15:04:05"),
 			msgColor, msgInfo, param.Msg, Reset,
 			fieldsString)
 	}
-	return fmt.Sprintf("[zorm] | [%s] | %v  | %s %#v | %s",
+	return fmt.Sprintf("[zorm] | [%s] | %v  | %s %v | %s",
 		param.Level.Level(),
 		now.Format("2006/01/02 - 15:04:05"),
 		msgInfo, param.Msg, fieldsString)
