@@ -3,6 +3,7 @@ package zorm
 import (
 	"errors"
 	"github.com/caixr9527/zorm/binding"
+	zormLog "github.com/caixr9527/zorm/log"
 	"github.com/caixr9527/zorm/render"
 	"html/template"
 	"io"
@@ -25,6 +26,7 @@ type Context struct {
 	DisallowUnknownFields bool
 	IsValidate            bool
 	StatusCode            int
+	Logger                *zormLog.Logger
 }
 
 func (c *Context) GetQuery(key string) string {
@@ -252,4 +254,8 @@ func (c *Context) MustBindWith(obj any, bind binding.Binding) error {
 
 func (c *Context) ShouldBindWith(obj any, bind binding.Binding) error {
 	return bind.Bind(c.R, obj)
+}
+
+func (c *Context) Fail(code int, msg string) {
+	c.String(code, msg)
 }

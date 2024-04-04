@@ -2,6 +2,7 @@ package zorm
 
 import (
 	"fmt"
+	zormlog "github.com/caixr9527/zorm/log"
 	"github.com/caixr9527/zorm/render"
 	"html/template"
 	"log"
@@ -116,6 +117,7 @@ type Engine struct {
 	funcMap    template.FuncMap
 	HTMLRender render.HTMLRender
 	pool       sync.Pool
+	Logger     *zormlog.Logger
 }
 
 func New() *Engine {
@@ -125,6 +127,12 @@ func New() *Engine {
 	engine.pool.New = func() any {
 		return engine.allocateContext()
 	}
+	return engine
+}
+
+func Default() *Engine {
+	engine := New()
+	engine.Logger = zormlog.Default()
 	return engine
 }
 
@@ -149,6 +157,7 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := e.pool.Get().(*Context)
 	ctx.W = w
 	ctx.R = r
+	ctx.Logger = e.Logger
 	e.httpRequestHandler(ctx, w, r)
 	e.pool.Put(ctx)
 }

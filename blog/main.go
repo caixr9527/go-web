@@ -25,7 +25,7 @@ type User struct {
 func main() {
 	engine := zorm.New()
 	group := engine.Group("user")
-	group.Use(zorm.Logging)
+	group.Use(zorm.Logging, zorm.Recovery)
 
 	group.Use(func(next zorm.HandlerFunc) zorm.HandlerFunc {
 		return func(ctx *zorm.Context) {
@@ -161,7 +161,8 @@ func main() {
 		ctx.JSON(http.StatusOK, m)
 	})
 
-	logger := zormlog.Default()
+	//logger := zormlog.Default()
+	logger := engine.Logger
 	logger.Level = zormlog.Debug
 	logger.Formatter = &zormlog.JsonFormatter{TimeDisplay: true}
 	//logger.Outs = append(logger.Outs, zormlog.FileWrite("./log/log.log"))
@@ -173,12 +174,12 @@ func main() {
 		ctx.IsValidate = true
 		ctx.DisallowUnknownFields = true
 		err := ctx.BindJson(&user)
-		logger.WithFields(zormlog.Fields{
+		ctx.Logger.WithFields(zormlog.Fields{
 			"name": "caixiaorong",
 			"id":   1000,
 		}).Info("info")
-		logger.Debug("debug")
-		logger.Error("error")
+		ctx.Logger.Debug("debug")
+		ctx.Logger.Error("error")
 
 		if err == nil {
 			ctx.JSON(http.StatusOK, user)
