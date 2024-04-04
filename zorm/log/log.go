@@ -2,9 +2,13 @@ package log
 
 import (
 	"fmt"
+	"github.com/caixr9527/zorm/internal/zstring"
 	"io"
+	"log"
 	"os"
 	"path"
+	"strings"
+	"time"
 )
 
 var (
@@ -31,6 +35,7 @@ type Logger struct {
 	Outs         []*LoggerWriter
 	LoggerFields Fields
 	logPath      string
+	LogFileSize  int64
 }
 
 type LoggerWriter struct {
@@ -111,9 +116,11 @@ func (l *Logger) Print(msg any, level LoggerLevel) {
 			param.IsColor = true
 			str = l.Formatter.Format(param)
 			fmt.Fprintln(out.Out, str)
+			l.checkFileSize(out)
 		}
 		if out.Level == -1 || level == out.Level {
 			fmt.Fprintln(out.Out, str)
+			l.checkFileSize(out)
 		}
 	}
 }
@@ -145,6 +152,29 @@ func (l *Logger) SetLogPath(logPath string) {
 		Level: Error,
 		Out:   FileWrite(path.Join(logPath, "error.log")),
 	})
+}
+
+func (l *Logger) checkFileSize(writer *LoggerWriter) {
+	logFile := writer.Out.(*os.File)
+	if logFile != nil {
+		stat, err := logFile.Stat()
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		size := stat.Size()
+		if l.LogFileSize <= 0 {
+			l.LogFileSize = 100 << 20
+		}
+		if size >= l.LogFileSize {
+			// todo 需要优化，应该一直往info.log文件里面写，满了再归档到另一个文件下
+			// todo 可添加，按天归档
+			_, name := path.Split(stat.Name())
+			fileName := name[0:strings.Index(name, ".")]
+			write := FileWrite(path.Join(l.logPath, zstring.JoinStrings(fileName, ".", time.Now().UnixMilli(), ".log")))
+			writer.Out = write
+		}
+	}
 }
 
 func FileWrite(name string) io.Writer {

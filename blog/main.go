@@ -166,6 +166,7 @@ func main() {
 	logger.Formatter = &zormlog.JsonFormatter{TimeDisplay: true}
 	//logger.Outs = append(logger.Outs, zormlog.FileWrite("./log/log.log"))
 	logger.SetLogPath("./log")
+	logger.LogFileSize = 1 << 10
 	group.Post("/jsonParam", func(ctx *zorm.Context) {
 		//user := &User{}
 		user := make([]User, 0)
