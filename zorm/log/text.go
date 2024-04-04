@@ -20,19 +20,23 @@ func (f *TextFormatter) Format(param *LoggingFormatParam) string {
 		fieldsString = sb.String()[0 : sb.Len()-1]
 
 	}
+	var msgInfo = "\n"
+	if param.Level == Error {
+		msgInfo = "\n Error Cause By :"
+	}
 	if param.IsColor {
 		levelColor := f.LevelColor(param.Level)
 		msgColor := f.MsgColor(param.Level)
-		return fmt.Sprintf("[zorm] | %s [%s] %s | %v  | %s %#v %s ｜ %s",
+		return fmt.Sprintf("[zorm] | %s [%s] %s | %v  | %s %s%#v %s ｜ %s",
 			levelColor, param.Level.Level(), Reset,
 			now.Format("2006/01/02 - 15:04:05"),
-			msgColor, param.Msg, Reset,
+			msgColor, msgInfo, param.Msg, Reset,
 			fieldsString)
 	}
-	return fmt.Sprintf("[zorm] | [%s] | %v  | %#v | %s",
+	return fmt.Sprintf("[zorm] | [%s] | %v  | %s %#v | %s",
 		param.Level.Level(),
 		now.Format("2006/01/02 - 15:04:05"),
-		param.Msg, fieldsString)
+		msgInfo, param.Msg, fieldsString)
 }
 
 func (f *TextFormatter) LevelColor(level LoggerLevel) interface{} {

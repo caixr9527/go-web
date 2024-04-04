@@ -236,11 +236,9 @@ func (c *Context) String(status int, format string, values ...any) error {
 }
 
 func (c *Context) Render(statusCode int, r render.Render) error {
+	c.W.WriteHeader(statusCode)
 	err := r.Render(c.W)
 	c.StatusCode = statusCode
-	if statusCode != http.StatusOK {
-		c.W.WriteHeader(statusCode)
-	}
 	return err
 }
 

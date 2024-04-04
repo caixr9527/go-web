@@ -23,7 +23,7 @@ type User struct {
 }
 
 func main() {
-	engine := zorm.New()
+	engine := zorm.Default()
 	group := engine.Group("user")
 	group.Use(zorm.Logging, zorm.Recovery)
 
@@ -164,13 +164,15 @@ func main() {
 	//logger := zormlog.Default()
 	logger := engine.Logger
 	logger.Level = zormlog.Debug
-	logger.Formatter = &zormlog.JsonFormatter{TimeDisplay: true}
+	//logger.Formatter = &zormlog.JsonFormatter{TimeDisplay: true}
 	//logger.Outs = append(logger.Outs, zormlog.FileWrite("./log/log.log"))
 	logger.SetLogPath("./log")
 	logger.LogFileSize = 1 << 10
+	var u *User
 	group.Post("/jsonParam", func(ctx *zorm.Context) {
 		//user := &User{}
 		user := make([]User, 0)
+		u.Age = 10
 		ctx.IsValidate = true
 		ctx.DisallowUnknownFields = true
 		err := ctx.BindJson(&user)

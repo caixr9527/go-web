@@ -98,6 +98,7 @@ func (r *routerGroup) Options(name string, handleFunc HandlerFunc, middlewareFun
 
 type router struct {
 	routerGroups []*routerGroup
+	engine       *Engine
 }
 
 func (r *router) Group(name string) *routerGroup {
@@ -108,6 +109,7 @@ func (r *router) Group(name string) *routerGroup {
 		handlerMethodMap:   make(map[string][]string),
 		treeNode:           &treeNode{name: "/", children: make([]*treeNode, 0)},
 	}
+	routerGroup.Use(r.engine.middles...)
 	r.routerGroups = append(r.routerGroups, routerGroup)
 	return routerGroup
 }
@@ -118,6 +120,7 @@ type Engine struct {
 	HTMLRender render.HTMLRender
 	pool       sync.Pool
 	Logger     *zormlog.Logger
+	middles    []MiddlewareFunc
 }
 
 func New() *Engine {
@@ -133,6 +136,8 @@ func New() *Engine {
 func Default() *Engine {
 	engine := New()
 	engine.Logger = zormlog.Default()
+	engine.Use(Logging, Recovery)
+	engine.router.engine = engine
 	return engine
 }
 
@@ -195,4 +200,8 @@ func (e *Engine) Run() {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func (e *Engine) Use(middles ...MiddlewareFunc) {
+	e.middles = middles
 }
