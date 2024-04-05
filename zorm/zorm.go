@@ -114,13 +114,16 @@ func (r *router) Group(name string) *routerGroup {
 	return routerGroup
 }
 
+type ErrorHandler func(err error) (int, any)
+
 type Engine struct {
 	router
-	funcMap    template.FuncMap
-	HTMLRender render.HTMLRender
-	pool       sync.Pool
-	Logger     *zormlog.Logger
-	middles    []MiddlewareFunc
+	funcMap      template.FuncMap
+	HTMLRender   render.HTMLRender
+	pool         sync.Pool
+	Logger       *zormlog.Logger
+	middles      []MiddlewareFunc
+	errorHandler ErrorHandler
 }
 
 func New() *Engine {
@@ -204,4 +207,8 @@ func (e *Engine) Run() {
 
 func (e *Engine) Use(middles ...MiddlewareFunc) {
 	e.middles = middles
+}
+
+func (e *Engine) RegisterErrorHandler(handler ErrorHandler) {
+	e.errorHandler = handler
 }

@@ -236,8 +236,7 @@ func (c *Context) String(status int, format string, values ...any) error {
 }
 
 func (c *Context) Render(statusCode int, r render.Render) error {
-	c.W.WriteHeader(statusCode)
-	err := r.Render(c.W)
+	err := r.Render(c.W, statusCode)
 	c.StatusCode = statusCode
 	return err
 }
@@ -256,4 +255,14 @@ func (c *Context) ShouldBindWith(obj any, bind binding.Binding) error {
 
 func (c *Context) Fail(code int, msg string) {
 	c.String(code, msg)
+}
+
+func (c *Context) HandlerWithError(statusCode int, obj any, err error) {
+	if err != nil {
+		code, data := c.engine.errorHandler(err)
+		c.JSON(code, data)
+		return
+	}
+	c.JSON(statusCode, obj)
+
 }

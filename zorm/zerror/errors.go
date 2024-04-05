@@ -13,14 +13,14 @@ func (e *ZError) Error() string {
 	return e.err.Error()
 }
 
-func (e *ZError) Put(zError *ZError) {
-	e.check(zError)
+func (e *ZError) Put(err error) {
+	e.check(err)
 }
 
-func (e *ZError) check(zError *ZError) {
-	if zError != nil {
-		e.err = zError
-		panic(zError)
+func (e *ZError) check(err error) {
+	if err != nil {
+		e.err = err
+		panic(e)
 	}
 }
 

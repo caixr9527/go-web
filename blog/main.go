@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"github.com/caixr9527/zorm"
 	zormlog "github.com/caixr9527/zorm/log"
@@ -25,6 +26,14 @@ type User struct {
 
 func main() {
 	engine := zorm.Default()
+	engine.RegisterErrorHandler(func(err error) (int, any) {
+		switch e := err.(type) {
+		case *BlogResponse:
+			return http.StatusOK, e.Response()
+		default:
+			return http.StatusInternalServerError, "500 error"
+		}
+	})
 	group := engine.Group("user")
 	group.Use(zorm.Logging, zorm.Recovery)
 
@@ -168,7 +177,7 @@ func main() {
 	//logger.Formatter = &zormlog.JsonFormatter{TimeDisplay: true}
 	//logger.Outs = append(logger.Outs, zormlog.FileWrite("./log/log.log"))
 	logger.SetLogPath("./log")
-	logger.LogFileSize = 1 << 10
+	//logger.LogFileSize = 1 << 10
 	var u *User
 	group.Post("/jsonParam", func(ctx *zorm.Context) {
 		//user := &User{}
@@ -204,36 +213,64 @@ func main() {
 	})
 
 	group.Get("/errorTest", func(ctx *zorm.Context) {
-		zError := zerror.Default()
-		zError.Result(func(zError *zerror.ZError) {
-			ctx.Logger.Info(zError.Error())
-			ctx.JSON(http.StatusInternalServerError, nil)
-		})
-		a(1, zError)
+		//zError := zerror.Default()
+		//zError.Result(func(zError *zerror.ZError) {
+		//	ctx.Logger.Error(zError.Error())
+		//	ctx.JSON(http.StatusInternalServerError, nil)
+		//})
+		//a(1, zError)
 		//b(1, zError)
 		//c(1, zError)
+		err := login()
+		ctx.HandlerWithError(http.StatusOK, user, err)
 	})
 
 	engine.Run()
 }
 
+type BlogResponse struct {
+	Success bool
+	Code    int
+	Data    any
+	Msg     string
+}
+
+func (b *BlogResponse) Error() string {
+	return b.Msg
+}
+
+func (b *BlogResponse) Response() any {
+	return b
+}
+
+func login() *BlogResponse {
+	return &BlogResponse{
+		Success: false,
+		Code:    -999,
+		Data:    nil,
+		Msg:     "login error"}
+}
+
 func a(i int, zError *zerror.ZError) {
 	if i == 1 {
-		zError.Put(zError)
+		err := errors.New("a error")
+		zError.Put(err)
 	}
 
 }
 
 func b(i int, zError *zerror.ZError) {
 	if i == 1 {
-		zError.Put(zError)
+		err := errors.New("a error")
+		zError.Put(err)
 	}
 
 }
 
 func c(i int, zError *zerror.ZError) {
 	if i == 1 {
-		zError.Put(zError)
+		err := errors.New("a error")
+		zError.Put(err)
 	}
 
 }
