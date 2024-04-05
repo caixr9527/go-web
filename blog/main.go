@@ -6,8 +6,11 @@ import (
 	"github.com/caixr9527/zorm"
 	zormlog "github.com/caixr9527/zorm/log"
 	"github.com/caixr9527/zorm/zerror"
+	"github.com/caixr9527/zorm/zpool"
 	"log"
 	"net/http"
+	"sync"
+	"time"
 )
 
 func Log(next zorm.HandlerFunc) zorm.HandlerFunc {
@@ -225,6 +228,40 @@ func main() {
 		ctx.HandlerWithError(http.StatusOK, user, err)
 	})
 
+	pool, _ := zpool.NewPool(5)
+	group.Get("/pool", func(ctx *zorm.Context) {
+		now := time.Now()
+		var wg sync.WaitGroup
+		wg.Add(5)
+		pool.Submit(func() {
+			fmt.Println("1111111")
+			time.Sleep(1 * time.Second)
+			wg.Done()
+		})
+		pool.Submit(func() {
+			fmt.Println("2222222")
+			time.Sleep(1 * time.Second)
+			wg.Done()
+		})
+		pool.Submit(func() {
+			fmt.Println("3333333")
+			time.Sleep(1 * time.Second)
+			wg.Done()
+		})
+		pool.Submit(func() {
+			fmt.Println("4444444")
+			time.Sleep(1 * time.Second)
+			wg.Done()
+		})
+		pool.Submit(func() {
+			fmt.Println("5555555")
+			time.Sleep(1 * time.Second)
+			wg.Done()
+		})
+		wg.Wait()
+		fmt.Printf("time: %v\n", time.Now().UnixMilli()-now.UnixMilli())
+		ctx.JSON(http.StatusOK, "success")
+	})
 	engine.Run()
 }
 
