@@ -13,6 +13,7 @@ type Worker struct {
 }
 
 func (w *Worker) run() {
+	w.pool.incrRunning()
 	go w.running()
 }
 
@@ -36,6 +37,5 @@ func (w *Worker) running() {
 		}
 		f()
 		w.pool.PutWorker(w)
-		w.pool.decrRunning()
 	}
 }

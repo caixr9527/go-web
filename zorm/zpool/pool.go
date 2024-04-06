@@ -19,6 +19,7 @@ type sig struct {
 
 const DefaultExpire = 3
 
+// todo 需要优化，时间上的优化
 type Pool struct {
 	// 容量
 	cap int32
@@ -76,19 +77,23 @@ func (p *Pool) expireWorker() {
 		workers := p.workers
 		n := len(workers) - 1
 		if n >= 0 {
+			var clearN = -1
 			for i, w := range workers {
 				if time.Now().Sub(w.lastTime) <= p.expire {
 					break
 				}
-				n = i
+				clearN = i
 				w.task <- nil
+				workers[i] = nil
 			}
-			if n >= len(workers)-1 {
-				p.workers = workers[:0]
-			} else {
-				p.workers = workers[n+1:]
+			if clearN != -1 {
+				if clearN >= len(workers)-1 {
+					p.workers = workers[:0]
+				} else {
+					p.workers = workers[clearN+1:]
+				}
+				fmt.Printf("清除完成，running:%d, workers:%v \n", p.running, p.workers)
 			}
-			fmt.Printf("清除完成，running:%d, workers:%v \n", p.running, p.workers)
 		}
 		p.lock.Unlock()
 	}
@@ -100,18 +105,17 @@ func (p *Pool) Submit(task func()) error {
 	}
 	w := p.GetWorker()
 	w.task <- task
-	w.pool.incrRunning()
 	return nil
 }
 
 func (p *Pool) GetWorker() *Worker {
 	// 获取pool里面的worker
+	p.lock.Lock()
 	idleWorkers := p.workers
 	n := len(idleWorkers) - 1
 	// 没有空闲，则需要新建一个
 	// 有正在运行的worker + 空闲的 > cap，阻塞等待worker释放
 	if n >= 0 {
-		p.lock.Lock()
 		w := idleWorkers[n]
 		idleWorkers[n] = nil
 		p.workers = idleWorkers[:n]
@@ -119,6 +123,7 @@ func (p *Pool) GetWorker() *Worker {
 		return w
 	}
 	if p.running < p.cap {
+		p.lock.Unlock()
 		// 有空闲
 		c := p.workerCache.Get()
 		var w *Worker
@@ -134,6 +139,7 @@ func (p *Pool) GetWorker() *Worker {
 		w.run()
 		return w
 	}
+	p.lock.Unlock()
 	return p.waitIdleWorker()
 }
 
@@ -214,4 +220,12 @@ func (p *Pool) waitIdleWorker() *Worker {
 	p.workers = idleWorkers[:n]
 	p.lock.Unlock()
 	return w
+}
+
+func (p *Pool) Running() int {
+	return int(atomic.LoadInt32(&p.running))
+}
+
+func (p *Pool) Free() int {
+	return int(p.cap - p.running)
 }

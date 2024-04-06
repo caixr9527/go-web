@@ -228,16 +228,16 @@ func main() {
 		ctx.HandlerWithError(http.StatusOK, user, err)
 	})
 
-	pool, _ := zpool.NewPool(1)
+	pool, _ := zpool.NewPool(5)
 	group.Get("/pool", func(ctx *zorm.Context) {
 		now := time.Now()
 		var wg sync.WaitGroup
 		wg.Add(5)
 		pool.Submit(func() {
 			fmt.Println("1111111")
+			wg.Done()
 			panic("panic")
 			time.Sleep(3 * time.Second)
-			wg.Done()
 		})
 		pool.Submit(func() {
 			fmt.Println("2222222")
