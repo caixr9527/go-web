@@ -228,34 +228,35 @@ func main() {
 		ctx.HandlerWithError(http.StatusOK, user, err)
 	})
 
-	pool, _ := zpool.NewPool(5)
+	pool, _ := zpool.NewPool(1)
 	group.Get("/pool", func(ctx *zorm.Context) {
 		now := time.Now()
 		var wg sync.WaitGroup
 		wg.Add(5)
 		pool.Submit(func() {
 			fmt.Println("1111111")
-			time.Sleep(1 * time.Second)
+			panic("panic")
+			time.Sleep(3 * time.Second)
 			wg.Done()
 		})
 		pool.Submit(func() {
 			fmt.Println("2222222")
-			time.Sleep(1 * time.Second)
+			time.Sleep(3 * time.Second)
 			wg.Done()
 		})
 		pool.Submit(func() {
 			fmt.Println("3333333")
-			time.Sleep(1 * time.Second)
+			time.Sleep(3 * time.Second)
 			wg.Done()
 		})
 		pool.Submit(func() {
 			fmt.Println("4444444")
-			time.Sleep(1 * time.Second)
+			time.Sleep(3 * time.Second)
 			wg.Done()
 		})
 		pool.Submit(func() {
 			fmt.Println("5555555")
-			time.Sleep(1 * time.Second)
+			time.Sleep(3 * time.Second)
 			wg.Done()
 		})
 		wg.Wait()

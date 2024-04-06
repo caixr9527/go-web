@@ -1,6 +1,9 @@
 package zpool
 
-import "time"
+import (
+	zormLog "github.com/caixr9527/zorm/log"
+	"time"
+)
 
 type Worker struct {
 	pool *Pool
@@ -14,8 +17,21 @@ func (w *Worker) run() {
 }
 
 func (w *Worker) running() {
+	defer func() {
+		w.pool.decrRunning()
+		w.pool.workerCache.Put(w)
+		if err := recover(); err != nil {
+			if w.pool.PanicHandler != nil {
+				w.pool.PanicHandler()
+			} else {
+				zormLog.Default().Error(err)
+			}
+		}
+		w.pool.cond.Signal()
+	}()
 	for f := range w.task {
 		if f == nil {
+			w.pool.workerCache.Put(w)
 			return
 		}
 		f()

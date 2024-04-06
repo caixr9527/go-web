@@ -33,7 +33,10 @@ type Pool struct {
 
 	lock sync.Mutex
 	// 只能调用一次
-	once sync.Once
+	once         sync.Once
+	workerCache  sync.Pool
+	cond         *sync.Cond
+	PanicHandler func()
 }
 
 func NewPool(cap int32) (*Pool, error) {
@@ -52,6 +55,13 @@ func NewPoolWithExpire(cap int32, expire int32) (*Pool, error) {
 		expire:  time.Duration(expire) * time.Second,
 		release: make(chan sig, 1),
 	}
+	pool.workerCache.New = func() any {
+		return &Worker{
+			pool: pool,
+			task: make(chan func(), 1),
+		}
+	}
+	pool.cond = sync.NewCond(&pool.lock)
 	go pool.expireWorker()
 	return pool, nil
 }
@@ -110,28 +120,21 @@ func (p *Pool) GetWorker() *Worker {
 	}
 	if p.running < p.cap {
 		// 有空闲
-		w := &Worker{
-			pool: p,
-			task: make(chan func(), 1),
+		c := p.workerCache.Get()
+		var w *Worker
+		if c == nil {
+			w = &Worker{
+				pool: p,
+				task: make(chan func(), 1),
+			}
+		} else {
+			w = c.(*Worker)
 		}
+
 		w.run()
 		return w
 	}
-	for {
-		p.lock.Lock()
-		idleWorkers := p.workers
-		n := len(idleWorkers) - 1
-		if n < 0 {
-			p.lock.Unlock()
-			continue
-		}
-
-		w := idleWorkers[n]
-		idleWorkers[n] = nil
-		p.workers = idleWorkers[:n]
-		p.lock.Unlock()
-		return w
-	}
+	return p.waitIdleWorker()
 }
 
 func (p *Pool) incrRunning() {
@@ -142,6 +145,7 @@ func (p *Pool) PutWorker(w *Worker) {
 	w.lastTime = time.Now()
 	p.lock.Lock()
 	p.workers = append(p.workers, w)
+	p.cond.Signal()
 	p.lock.Unlock()
 }
 
@@ -175,4 +179,39 @@ func (p *Pool) Restart() bool {
 
 func (p *Pool) IsRelease() bool {
 	return len(p.release) > 0
+}
+
+func (p *Pool) waitIdleWorker() *Worker {
+	p.lock.Lock()
+	p.cond.Wait()
+
+	fmt.Println("有空闲worker")
+	idleWorkers := p.workers
+	n := len(idleWorkers) - 1
+	if n < 0 {
+		p.lock.Unlock()
+		if p.running < p.cap {
+			// 有空闲
+			c := p.workerCache.Get()
+			var w *Worker
+			if c == nil {
+				w = &Worker{
+					pool: p,
+					task: make(chan func(), 1),
+				}
+			} else {
+				w = c.(*Worker)
+			}
+
+			w.run()
+			return w
+		}
+		return p.waitIdleWorker()
+	}
+
+	w := idleWorkers[n]
+	idleWorkers[n] = nil
+	p.workers = idleWorkers[:n]
+	p.lock.Unlock()
+	return w
 }
