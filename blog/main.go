@@ -181,11 +181,11 @@ func main() {
 	//logger.Outs = append(logger.Outs, zormlog.FileWrite("./log/log.log"))
 	logger.SetLogPath("./log")
 	//logger.LogFileSize = 1 << 10
-	var u *User
+	//var u *User
 	group.Post("/jsonParam", func(ctx *zorm.Context) {
 		//user := &User{}
 		user := make([]User, 0)
-		u.Age = 10
+		//u.Age = 10
 		ctx.IsValidate = true
 		ctx.DisallowUnknownFields = true
 		err := ctx.BindJson(&user)
@@ -263,7 +263,8 @@ func main() {
 		fmt.Printf("time: %v\n", time.Now().UnixMilli()-now.UnixMilli())
 		ctx.JSON(http.StatusOK, "success")
 	})
-	engine.Run()
+	//engine.Run()
+	engine.RunTLS(":8118", "key/server.pem", "key/server.key")
 }
 
 type BlogResponse struct {
