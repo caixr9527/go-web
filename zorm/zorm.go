@@ -206,7 +206,7 @@ func (e *Engine) Run() {
 }
 
 func (e *Engine) Use(middles ...MiddlewareFunc) {
-	e.middles = middles
+	e.middles = append(e.middles, middles...)
 }
 
 func (e *Engine) RegisterErrorHandler(handler ErrorHandler) {

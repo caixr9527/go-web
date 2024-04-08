@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 )
 
 const defaultMaxMemory = 32 << 20
@@ -27,6 +28,33 @@ type Context struct {
 	IsValidate            bool
 	StatusCode            int
 	Logger                *zormLog.Logger
+	Keys                  map[string]any
+	mu                    sync.RWMutex
+	sameSite              http.SameSite
+}
+
+func (c *Context) SetSamSite(s http.SameSite) {
+	c.sameSite = s
+}
+
+func (c *Context) Set(key string, value any) {
+	c.mu.Lock()
+	if c.Keys == nil {
+		c.Keys = make(map[string]any)
+	}
+	c.Keys[key] = value
+	c.mu.Unlock()
+}
+
+func (c *Context) Get(key string) (value any, ok bool) {
+	c.mu.RLock()
+	value, ok = c.Keys[key]
+	c.mu.RUnlock()
+	return
+}
+
+func (c *Context) SetBasicAuth(username, password string) {
+	c.R.Header.Set("Authorization", "Basic "+BasicAuth(username, password))
 }
 
 func (c *Context) GetQuery(key string) string {
@@ -265,4 +293,20 @@ func (c *Context) HandlerWithError(statusCode int, obj any, err error) {
 	}
 	c.JSON(statusCode, obj)
 
+}
+
+func (c *Context) SetCookie(name, value string, maxAge int, path, domain string, secure, httpOnly bool) {
+	if path == "" {
+		path = "/"
+	}
+	http.SetCookie(c.W, &http.Cookie{
+		Name:     name,
+		Value:    url.QueryEscape(value),
+		Path:     path,
+		Domain:   domain,
+		MaxAge:   maxAge,
+		Secure:   secure,
+		HttpOnly: httpOnly,
+		SameSite: c.sameSite,
+	})
 }

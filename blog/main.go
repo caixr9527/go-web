@@ -37,6 +37,12 @@ func main() {
 			return http.StatusInternalServerError, "500 error"
 		}
 	})
+	fmt.Println(zorm.BasicAuth("caixr", "123456"))
+	auth := &zorm.Accounts{
+		Users: make(map[string]string),
+	}
+	auth.Users["caixr"] = "123456"
+	engine.Use(auth.BasicAuth)
 	group := engine.Group("user")
 	group.Use(zorm.Logging, zorm.Recovery)
 
