@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/caixr9527/zorm"
 	zormlog "github.com/caixr9527/zorm/log"
+	"github.com/caixr9527/zorm/token"
 	"github.com/caixr9527/zorm/zerror"
 	"github.com/caixr9527/zorm/zpool"
 	"log"
@@ -37,12 +38,12 @@ func main() {
 			return http.StatusInternalServerError, "500 error"
 		}
 	})
-	fmt.Println(zorm.BasicAuth("caixr", "123456"))
-	auth := &zorm.Accounts{
-		Users: make(map[string]string),
-	}
-	auth.Users["caixr"] = "123456"
-	engine.Use(auth.BasicAuth)
+	//fmt.Println(zorm.BasicAuth("caixr", "123456"))
+	//auth := &zorm.Accounts{
+	//	Users: make(map[string]string),
+	//}
+	//auth.Users["caixr"] = "123456"
+	//engine.Use(auth.BasicAuth)
 	group := engine.Group("user")
 	group.Use(zorm.Logging, zorm.Recovery)
 
@@ -268,6 +269,47 @@ func main() {
 		wg.Wait()
 		fmt.Printf("time: %v\n", time.Now().UnixMilli()-now.UnixMilli())
 		ctx.JSON(http.StatusOK, "success")
+	})
+	group.Get("/loginToken", func(ctx *zorm.Context) {
+		jwt := &token.JwtHandler{}
+		jwt.Key = []byte("12346")
+		jwt.SendCookie = true
+		jwt.TimeOut = 10 * time.Minute
+		jwt.RefreshTimeOut = 2 * 60 * time.Minute
+		jwt.Authenticator = func(ctx *zorm.Context) (map[string]any, error) {
+			data := make(map[string]any)
+			data["userId"] = 1
+			return data, nil
+		}
+		jwtResponse, err := jwt.LoginHandler(ctx)
+		if err != nil {
+			log.Println(err)
+			ctx.JSON(http.StatusOK, err.Error())
+			return
+		}
+		ctx.JSON(http.StatusOK, jwtResponse)
+	})
+
+	group.Get("/refreshToken", func(ctx *zorm.Context) {
+		jwt := &token.JwtHandler{}
+		jwt.Key = []byte("12346")
+		jwt.SendCookie = true
+		jwt.TimeOut = 60 * time.Second
+		jwt.RefreshTimeOut = 2 * 60 * time.Second
+		jwt.RefreshKey = "blog_refresh_token"
+		ctx.Set(jwt.RefreshKey, "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3MTI2ODAyODYsImlhdCI6MTcxMjY3MzA4NiwidXNlcklkIjoxfQ.LbSM0lsnIBWSx40nV-OHsu-ebPVYpg2msKEkYaqhPVc")
+		jwt.Authenticator = func(ctx *zorm.Context) (map[string]any, error) {
+			data := make(map[string]any)
+			data["userId"] = 1
+			return data, nil
+		}
+		jwtResponse, err := jwt.RefreshHandler(ctx)
+		if err != nil {
+			log.Println(err)
+			ctx.JSON(http.StatusOK, err.Error())
+			return
+		}
+		ctx.JSON(http.StatusOK, jwtResponse)
 	})
 	//engine.Run()
 	engine.RunTLS(":8118", "key/server.pem", "key/server.key")
