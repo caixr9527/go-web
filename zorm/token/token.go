@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/caixr9527/zorm"
 	"github.com/golang-jwt/jwt/v4"
+	"net/http"
 	"time"
 )
 
@@ -17,7 +18,7 @@ type JwtHandler struct {
 	TimeFunc       func() time.Time
 	Key            []byte
 	RefreshKey     string
-	PrivateKey     string
+	PrivateKey     string // todo 是否是字节
 	SendCookie     bool
 	Authenticator  func(ctx *zorm.Context) (map[string]any, error)
 	CookieName     string
@@ -25,6 +26,8 @@ type JwtHandler struct {
 	CookieDomain   string
 	SecureCookie   bool
 	CookieHTTPOnly bool
+	Header         string
+	AuthHandler    func(ctx *zorm.Context, err error)
 }
 type JwtResponse struct {
 	Token        string
@@ -175,4 +178,52 @@ func (j *JwtHandler) RefreshHandler(ctx *zorm.Context) (*JwtResponse, error) {
 		ctx.SetCookie(j.CookieName, tokenString, int(j.CookieMaxAge), "/", j.CookieDomain, j.SecureCookie, j.CookieHTTPOnly)
 	}
 	return jr, nil
+}
+
+func (j *JwtHandler) AuthInterceptor(next zorm.HandlerFunc) zorm.HandlerFunc {
+	return func(ctx *zorm.Context) {
+		if j.Header == "" {
+			j.Header = "Authorization"
+		}
+		token := ctx.R.Header.Get(j.Header)
+		if token == "" {
+			if j.SendCookie {
+
+				cookie, err := ctx.R.Cookie(j.CookieName)
+				if err != nil {
+					j.AuthErrorHandler(ctx, err)
+					return
+				}
+				token = cookie.String()
+			}
+
+		}
+		if token == "" {
+			j.AuthErrorHandler(ctx, errors.New("token is null"))
+			return
+		}
+		t, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
+			if j.usingPublicKeyAlgo() {
+				return j.PrivateKey, nil
+			} else {
+				return j.Key, nil
+			}
+		})
+
+		if err != nil {
+			j.AuthErrorHandler(ctx, err)
+			return
+		}
+		claims := t.Claims.(jwt.MapClaims)
+		ctx.Set("jwt_claims", claims)
+		next(ctx)
+	}
+}
+
+func (j *JwtHandler) AuthErrorHandler(ctx *zorm.Context, err error) {
+	if j.AuthHandler == nil {
+		ctx.W.WriteHeader(http.StatusUnauthorized)
+	} else {
+		j.AuthHandler(ctx, err)
+	}
 }

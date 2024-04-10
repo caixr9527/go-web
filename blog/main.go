@@ -44,6 +44,10 @@ func main() {
 	//}
 	//auth.Users["caixr"] = "123456"
 	//engine.Use(auth.BasicAuth)
+	jh := &token.JwtHandler{
+		Key: []byte("123456"),
+	}
+	engine.Use(jh.AuthInterceptor)
 	group := engine.Group("user")
 	group.Use(zorm.Logging, zorm.Recovery)
 
@@ -272,7 +276,7 @@ func main() {
 	})
 	group.Get("/loginToken", func(ctx *zorm.Context) {
 		jwt := &token.JwtHandler{}
-		jwt.Key = []byte("12346")
+		jwt.Key = []byte("123456")
 		jwt.SendCookie = true
 		jwt.TimeOut = 10 * time.Minute
 		jwt.RefreshTimeOut = 2 * 60 * time.Minute
