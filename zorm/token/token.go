@@ -10,6 +10,7 @@ import (
 
 const JWTToken = "zorm_token"
 
+// todo 需要实现白名单
 type JwtHandler struct {
 	// jwt 算法
 	Alg            string
