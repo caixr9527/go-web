@@ -190,7 +190,8 @@ func main() {
 	logger.Level = zormlog.Debug
 	//logger.Formatter = &zormlog.JsonFormatter{TimeDisplay: true}
 	//logger.Outs = append(logger.Outs, zormlog.FileWrite("./log/log.log"))
-	logger.SetLogPath("./log")
+	//logger.SetLogPath("./log")
+	//fmt.Println(config.Conf)
 	//logger.LogFileSize = 1 << 10
 	//var u *User
 	group.Post("/jsonParam", func(ctx *zorm.Context) {

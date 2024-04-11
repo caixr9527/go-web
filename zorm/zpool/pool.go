@@ -3,6 +3,7 @@ package zpool
 import (
 	"errors"
 	"fmt"
+	"github.com/caixr9527/zorm/config"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -42,6 +43,14 @@ type Pool struct {
 
 func NewPool(cap int32) (*Pool, error) {
 	return NewPoolWithExpire(cap, DefaultExpire)
+}
+
+func New() (*Pool, error) {
+	c, ok := config.Conf.Pool["cap"]
+	if !ok {
+		c = 10
+	}
+	return NewPool(c.(int32))
 }
 
 func NewPoolWithExpire(cap int32, expire int32) (*Pool, error) {

@@ -1,0 +1,9 @@
+[log]
+path="./log"
+[pool]
+cap=10
+
+[server]
+port=8111
+[template]
+pattern="./tpl/*.html"

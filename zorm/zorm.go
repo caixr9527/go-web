@@ -1,7 +1,9 @@
 package zorm
 
 import (
+	"errors"
 	"fmt"
+	"github.com/caixr9527/zorm/config"
 	zormlog "github.com/caixr9527/zorm/log"
 	"github.com/caixr9527/zorm/render"
 	"html/template"
@@ -139,6 +141,12 @@ func New() *Engine {
 func Default() *Engine {
 	engine := New()
 	engine.Logger = zormlog.Default()
+	logPath, ok := config.Conf.Log["path"]
+	if ok {
+		engine.Logger.SetLogPath(logPath.(string))
+	} else {
+		engine.Logger.SetLogPath("./log")
+	}
 	engine.Use(Logging, Recovery)
 	engine.router.engine = engine
 	return engine
@@ -155,6 +163,17 @@ func (e *Engine) SetFuncMap(funcMap template.FuncMap) {
 func (e *Engine) LoadTemplate(pattern string) {
 	t := template.Must(template.New("").Funcs(e.funcMap).ParseGlob(pattern))
 	e.SetHTMLTemplate(t)
+}
+
+func (e *Engine) LoadTemplateConfig() error {
+	pattern, ok := config.Conf.Template["pattern"]
+	if !ok {
+		// todo 抛异常 打日志
+		return errors.New("template pattern config not found")
+	}
+	t := template.Must(template.New("").Funcs(e.funcMap).ParseGlob(pattern.(string)))
+	e.SetHTMLTemplate(t)
+	return nil
 }
 
 func (e *Engine) SetHTMLTemplate(t *template.Template) {
