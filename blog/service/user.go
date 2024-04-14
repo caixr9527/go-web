@@ -30,3 +30,48 @@ func SaveUser() {
 	zDb.Close()
 
 }
+
+func SaveUserBatch() {
+	//dataSource := fmt.Sprintf("root:root@tcp(localhost:3306)/sys?charset=utf8&loc%sparseTime=true", url.QueryEscape("Asia/Shanghai"))
+	//dataSource := fmt.Sprintf("root:root@tcp(localhost:3306)/sys?charset=utf8&loc%sparseTime=true", url.QueryEscape("Asia/Shanghai"))
+	zDb := orm.Open("mysql", "root:root@tcp(localhost:3306)/sys?charset=utf8")
+	//zDb.Prefix()
+	user := &User{
+		//Id:       1,
+		UserName: "smart22",
+		Password: "123456",
+	}
+	user1 := &User{
+		//Id:       1,
+		UserName: "smart11",
+		Password: "123456",
+	}
+	var users []any
+	users = append(users, user1, user)
+	id, _, err := zDb.New().Table("User").InsertBatch(users)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(id)
+	zDb.Close()
+
+}
+
+func UpdateUser() {
+	//dataSource := fmt.Sprintf("root:root@tcp(localhost:3306)/sys?charset=utf8&loc%sparseTime=true", url.QueryEscape("Asia/Shanghai"))
+	//dataSource := fmt.Sprintf("root:root@tcp(localhost:3306)/sys?charset=utf8&loc%sparseTime=true", url.QueryEscape("Asia/Shanghai"))
+	zDb := orm.Open("mysql", "root:root@tcp(localhost:3306)/sys?charset=utf8")
+	//zDb.Prefix()
+	//user := &User{
+	//	//Id:       1,
+	//	UserName: "smart666",
+	//	Password: "123456",
+	//}
+	id, _, err := zDb.New().Table("User").Where("id", 1).Update("user_name", "smart666")
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(id)
+	zDb.Close()
+
+}
