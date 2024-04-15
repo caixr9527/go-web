@@ -206,9 +206,56 @@ func (session *DbSession) batchValues(data []any) error {
 	return nil
 }
 
+func (session *DbSession) UpdateParam(field string, value any) *DbSession {
+	if session.updateParam.String() != "" {
+		session.updateParam.WriteString(",")
+	}
+	session.updateParam.WriteString(field)
+	session.updateParam.WriteString(" = ?")
+	session.values = append(session.values, value)
+	return session
+}
+
+func (session *DbSession) UpdateMap(data map[string]any) *DbSession {
+	for k, v := range data {
+		if session.updateParam.String() != "" {
+			session.updateParam.WriteString(",")
+		}
+		session.updateParam.WriteString(k)
+		session.updateParam.WriteString(" = ?")
+		session.values = append(session.values, v)
+	}
+	return session
+}
+
 func (session *DbSession) Update(data ...any) (int64, int64, error) {
-	if len(data) == 0 || len(data) > 2 {
+	if len(data) > 2 {
 		return -1, -1, errors.New("param not valid")
+	}
+	if len(data) == 0 {
+		query := fmt.Sprintf("update %s set %s", session.tableName, session.updateParam.String())
+		var sb strings.Builder
+		sb.WriteString(query)
+		sb.WriteString(session.whereParam.String())
+		session.db.logger.Info(sb.String())
+		stmt, err := session.db.db.Prepare(sb.String())
+		if err != nil {
+			return -1, -1, err
+		}
+		session.values = append(session.values, session.whereValues...)
+		r, err := stmt.Exec(session.values...)
+		if err != nil {
+			return -1, -1, err
+		}
+		id, err := r.LastInsertId()
+		if err != nil {
+			return -1, -1, err
+		}
+		affected, err := r.RowsAffected()
+		if err != nil {
+			return -1, -1, err
+		}
+		return id, affected, nil
 	}
 	single := true
 	if len(data) == 2 {
@@ -221,6 +268,43 @@ func (session *DbSession) Update(data ...any) (int64, int64, error) {
 		session.updateParam.WriteString(data[0].(string))
 		session.updateParam.WriteString(" = ?")
 		session.values = append(session.values, data[1])
+	} else {
+		updateData := data[0]
+		t := reflect.TypeOf(updateData)
+		v := reflect.ValueOf(updateData)
+		if t.Kind() != reflect.Pointer {
+			return -1, -1, errors.New("updateData type must be pointer")
+		}
+		tVar := t.Elem()
+		vVar := v.Elem()
+		if session.tableName == "" {
+			session.tableName = session.db.Prefix + strings.ToLower(Name(tVar.Name()))
+		}
+		for i := 0; i < tVar.NumField(); i++ {
+			fieldName := tVar.Field(i).Name
+			tag := tVar.Field(i).Tag
+			sqlTag := tag.Get("zorm")
+			if sqlTag == "" {
+				sqlTag = strings.ToLower(Name(fieldName))
+			} else {
+				if strings.Contains(sqlTag, "auto_increment") {
+					continue
+				}
+				if strings.Contains(sqlTag, ",") {
+					sqlTag = sqlTag[:strings.Index(sqlTag, ",")]
+				}
+			}
+			id := vVar.Field(i).Interface()
+			if strings.ToLower(sqlTag) == "id" && IsAutoId(id) {
+				continue
+			}
+			if session.updateParam.String() != "" {
+				session.updateParam.WriteString(",")
+			}
+			session.updateParam.WriteString(sqlTag)
+			session.updateParam.WriteString(" = ?")
+			session.values = append(session.values, vVar.Field(i).Interface())
+		}
 	}
 	query := fmt.Sprintf("update %s set %s", session.tableName, session.updateParam.String())
 	var sb strings.Builder
@@ -252,7 +336,20 @@ func (session *DbSession) Where(field string, value any) *DbSession {
 	if session.whereParam.String() == "" {
 		session.whereParam.WriteString(" where ")
 	} else {
-		session.whereParam.WriteString(", ")
+		session.whereParam.WriteString(" and ")
+	}
+	session.whereParam.WriteString(field)
+	session.whereParam.WriteString(" = ")
+	session.whereParam.WriteString(" ? ")
+	session.whereValues = append(session.whereValues, value)
+	return session
+}
+
+func (session *DbSession) Or(field string, value any) *DbSession {
+	if session.whereParam.String() == "" {
+		session.whereParam.WriteString(" where ")
+	} else {
+		session.whereParam.WriteString(" and ")
 	}
 	session.whereParam.WriteString(field)
 	session.whereParam.WriteString(" = ")
