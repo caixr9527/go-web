@@ -22,7 +22,7 @@ func SaveUser() {
 		UserName: "smart",
 		Password: "123456",
 	}
-	id, _, err := zDb.New().Table("User").Insert(user)
+	id, _, err := zDb.New(user).Table("User").Insert(user)
 	if err != nil {
 		panic(err)
 	}
@@ -48,7 +48,7 @@ func SaveUserBatch() {
 	}
 	var users []any
 	users = append(users, user1, user)
-	id, _, err := zDb.New().Table("User").InsertBatch(users)
+	id, _, err := zDb.New(user).Table("User").InsertBatch(users)
 	if err != nil {
 		panic(err)
 	}
@@ -70,7 +70,7 @@ func UpdateUser() {
 	fmt.Println(user)
 	//id, _, err := zDb.New().Table("User").Where("id", 1).Update("user_name", "smart666")
 	//id, _, err := zDb.New().Table("User").Where("id", 1).Update(user)
-	id, _, err := zDb.New().Table("User").
+	id, _, err := zDb.New(user).Table("User").
 		Where("id", 1).
 		UpdateParam("password", 1111).
 		Update()
@@ -78,6 +78,22 @@ func UpdateUser() {
 		panic(err)
 	}
 	fmt.Println(id)
+	zDb.Close()
+
+}
+
+func SelectOne() {
+	zDb := orm.Open("mysql", "root:root@tcp(localhost:3306)/sys?charset=utf8")
+	//zDb.Prefix()
+	user := &User{}
+	fmt.Println(user)
+	err := zDb.New(user).Table("User").
+		Where("id", 2).
+		SelectOne(user)
+	fmt.Println(user)
+	if err != nil {
+		panic(err)
+	}
 	zDb.Close()
 
 }

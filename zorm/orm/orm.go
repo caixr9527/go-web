@@ -53,10 +53,19 @@ func (db *ZDb) Close() error {
 	return db.db.Close()
 }
 
-func (db *ZDb) New() *DbSession {
-	return &DbSession{
+func (db *ZDb) New(data any) *DbSession {
+	m := &DbSession{
 		db: db,
 	}
+	t := reflect.TypeOf(data)
+	if t.Kind() != reflect.Pointer {
+		panic(errors.New("data type must be pointer"))
+	}
+	tVar := t.Elem()
+	if m.tableName == "" {
+		m.tableName = m.db.Prefix + strings.ToLower(Name(tVar.Name()))
+	}
+	return m
 }
 
 func (db *ZDb) SetMaxIdleConns(n int) {
@@ -330,6 +339,69 @@ func (session *DbSession) Update(data ...any) (int64, int64, error) {
 	}
 	return id, affected, nil
 
+}
+
+func (session *DbSession) SelectOne(data any, fields ...string) error {
+	t := reflect.TypeOf(data)
+	if t.Kind() != reflect.Pointer {
+		return errors.New("data must be pointer")
+	}
+	fieldStr := "*"
+	if len(fields) > 0 {
+		fieldStr = strings.Join(fields, ",")
+	}
+	query := fmt.Sprintf("select %s from %s", fieldStr, session.tableName)
+	var sb strings.Builder
+	sb.WriteString(query)
+	sb.WriteString(session.whereParam.String())
+	session.db.logger.Info(sb.String())
+	stmt, err := session.db.db.Prepare(sb.String())
+	if err != nil {
+		return err
+	}
+	rows, err := stmt.Query(session.whereValues...)
+	if err != nil {
+		return err
+	}
+	columns, err := rows.Columns()
+	if err != nil {
+		return err
+	}
+	values := make([]any, len(columns))
+	fieldScan := make([]any, len(columns))
+	for i := range fieldScan {
+		fieldScan[i] = &values[i]
+	}
+	if rows.Next() {
+		err := rows.Scan(fieldScan...)
+		if err != nil {
+			return err
+		}
+		tVar := t.Elem()
+		vVar := reflect.ValueOf(data).Elem()
+		for i := 0; i < tVar.NumField(); i++ {
+			name := tVar.Field(i).Name
+			tag := tVar.Field(i).Tag
+			sqlTag := tag.Get("zorm")
+			if sqlTag == "" {
+				sqlTag = strings.ToLower(Name(name))
+			} else {
+				if strings.Contains(sqlTag, ",") {
+					sqlTag = sqlTag[:strings.Index(sqlTag, ",")]
+				}
+			}
+			for j, colName := range columns {
+				if sqlTag == colName {
+					target := values[j]
+					targetValue := reflect.ValueOf(target)
+					fieldType := tVar.Field(i).Type
+					result := reflect.ValueOf(targetValue.Interface()).Convert(fieldType)
+					vVar.Field(i).Set(result)
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func (session *DbSession) Where(field string, value any) *DbSession {
