@@ -17,3 +17,7 @@ func TestUpdateUser(t *testing.T) {
 func TestSelectOne(t *testing.T) {
 	SelectOne()
 }
+
+func TestSelect(t *testing.T) {
+	Select()
+}

@@ -341,6 +341,94 @@ func (session *DbSession) Update(data ...any) (int64, int64, error) {
 
 }
 
+func (session *DbSession) Delete() (int64, error) {
+	query := fmt.Sprintf("delete from %s ", session.tableName)
+	var sb strings.Builder
+	sb.WriteString(query)
+	sb.WriteString(session.whereParam.String())
+	session.db.logger.Info(sb.String())
+	stmt, err := session.db.db.Prepare(sb.String())
+	if err != nil {
+		return 0, err
+	}
+	exec, err := stmt.Exec(session.whereParam)
+	if err != nil {
+		return 0, err
+	}
+	return exec.RowsAffected()
+}
+
+func (session *DbSession) Select(data any, fields ...string) ([]any, error) {
+	t := reflect.TypeOf(data)
+	if t.Kind() != reflect.Pointer {
+		return nil, errors.New("data must be pointer")
+	}
+	fieldStr := "*"
+	if len(fields) > 0 {
+		fieldStr = strings.Join(fields, ",")
+	}
+	query := fmt.Sprintf("select %s from %s", fieldStr, session.tableName)
+	var sb strings.Builder
+	sb.WriteString(query)
+	sb.WriteString(session.whereParam.String())
+	session.db.logger.Info(sb.String())
+	stmt, err := session.db.db.Prepare(sb.String())
+	if err != nil {
+		return nil, err
+	}
+	rows, err := stmt.Query(session.whereValues...)
+	if err != nil {
+		return nil, err
+	}
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]any, 0)
+	for {
+		if rows.Next() {
+			data := reflect.New(t.Elem()).Interface()
+			values := make([]any, len(columns))
+			fieldScan := make([]any, len(columns))
+			for i := range fieldScan {
+				fieldScan[i] = &values[i]
+			}
+			err := rows.Scan(fieldScan...)
+			if err != nil {
+				return nil, err
+			}
+			tVar := t.Elem()
+			vVar := reflect.ValueOf(data).Elem()
+			for i := 0; i < tVar.NumField(); i++ {
+				name := tVar.Field(i).Name
+				tag := tVar.Field(i).Tag
+				sqlTag := tag.Get("zorm")
+				if sqlTag == "" {
+					sqlTag = strings.ToLower(Name(name))
+				} else {
+					if strings.Contains(sqlTag, ",") {
+						sqlTag = sqlTag[:strings.Index(sqlTag, ",")]
+					}
+				}
+				for j, colName := range columns {
+					if sqlTag == colName {
+						target := values[j]
+						targetValue := reflect.ValueOf(target)
+						fieldType := tVar.Field(i).Type
+						result := reflect.ValueOf(targetValue.Interface()).Convert(fieldType)
+						vVar.Field(i).Set(result)
+					}
+				}
+			}
+			result = append(result, data)
+		} else {
+			break
+		}
+	}
+	return result, nil
+}
+
 func (session *DbSession) SelectOne(data any, fields ...string) error {
 	t := reflect.TypeOf(data)
 	if t.Kind() != reflect.Pointer {
@@ -407,8 +495,6 @@ func (session *DbSession) SelectOne(data any, fields ...string) error {
 func (session *DbSession) Where(field string, value any) *DbSession {
 	if session.whereParam.String() == "" {
 		session.whereParam.WriteString(" where ")
-	} else {
-		session.whereParam.WriteString(" and ")
 	}
 	session.whereParam.WriteString(field)
 	session.whereParam.WriteString(" = ")
@@ -417,17 +503,107 @@ func (session *DbSession) Where(field string, value any) *DbSession {
 	return session
 }
 
-func (session *DbSession) Or(field string, value any) *DbSession {
+func (session *DbSession) Like(field string, value any) *DbSession {
 	if session.whereParam.String() == "" {
 		session.whereParam.WriteString(" where ")
-	} else {
-		session.whereParam.WriteString(" and ")
 	}
 	session.whereParam.WriteString(field)
-	session.whereParam.WriteString(" = ")
+	session.whereParam.WriteString(" like ")
 	session.whereParam.WriteString(" ? ")
-	session.whereValues = append(session.whereValues, value)
+	session.whereValues = append(session.whereValues, "%"+value.(string)+"%")
 	return session
+}
+
+func (session *DbSession) LikeRight(field string, value any) *DbSession {
+	if session.whereParam.String() == "" {
+		session.whereParam.WriteString(" where ")
+	}
+	session.whereParam.WriteString(field)
+	session.whereParam.WriteString(" like ")
+	session.whereParam.WriteString(" ? ")
+	session.whereValues = append(session.whereValues, value.(string)+"%")
+	return session
+}
+
+func (session *DbSession) LikeLeft(field string, value any) *DbSession {
+	if session.whereParam.String() == "" {
+		session.whereParam.WriteString(" where ")
+	}
+	session.whereParam.WriteString(field)
+	session.whereParam.WriteString(" like ")
+	session.whereParam.WriteString(" ? ")
+	session.whereValues = append(session.whereValues, "%"+value.(string)+"%")
+	return session
+}
+
+func (session *DbSession) Group(field ...string) *DbSession {
+
+	session.whereParam.WriteString(" group by ")
+	session.whereParam.WriteString(strings.Join(field, ","))
+	return session
+}
+
+func (session *DbSession) OrderDesc(field ...string) *DbSession {
+
+	session.whereParam.WriteString(" order by ")
+	session.whereParam.WriteString(strings.Join(field, ","))
+	session.whereParam.WriteString(" desc ")
+	return session
+}
+
+func (session *DbSession) OrderAsc(field ...string) *DbSession {
+
+	session.whereParam.WriteString(" order by ")
+	session.whereParam.WriteString(strings.Join(field, ","))
+	session.whereParam.WriteString(" asc ")
+	return session
+}
+
+func (session *DbSession) Order(field ...string) *DbSession {
+	if len(field)%2 != 0 {
+		panic("field num not true")
+	}
+	session.whereParam.WriteString(" order by ")
+	for index, v := range field {
+		session.whereParam.WriteString(v + " ")
+		if index%2 != 0 && index < len(field)-1 {
+			session.whereParam.WriteString(",")
+		}
+	}
+	return session
+}
+
+func (session *DbSession) And() *DbSession {
+	session.whereParam.WriteString(" and ")
+	return session
+}
+
+func (session *DbSession) Or() *DbSession {
+	session.whereParam.WriteString(" or ")
+	return session
+}
+
+func (session *DbSession) Count() (int64, error) {
+	return 0, nil
+}
+
+func (session *DbSession) Aggregate() (int64, error) {
+	return 0, nil
+}
+
+func (session *DbSession) Exec(sql string, values ...any) (int64, error) {
+	stmt, err := session.db.db.Prepare(sql)
+	if err != nil {
+		return 0, err
+	}
+	r, err := stmt.Exec(values)
+	if err != nil {
+		return 0, err
+	}
+	if strings.Contains(strings.ToLower(sql), "insert") {
+		return r.LastInsertId()
+	}
+	return r.RowsAffected()
 }
 
 func IsAutoId(id any) bool {

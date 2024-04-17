@@ -97,3 +97,22 @@ func SelectOne() {
 	zDb.Close()
 
 }
+
+func Select() {
+	zDb := orm.Open("mysql", "root:root@tcp(localhost:3306)/sys?charset=utf8")
+	//zDb.Prefix()
+	user := &User{}
+	fmt.Println(user)
+	users, err := zDb.New(user).Table("User").
+		Select(user)
+	for _, v := range users {
+		u := v.(*User)
+		fmt.Println(u)
+	}
+	fmt.Println(users)
+	if err != nil {
+		panic(err)
+	}
+	zDb.Close()
+
+}
