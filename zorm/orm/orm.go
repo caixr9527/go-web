@@ -18,6 +18,8 @@ type ZDb struct {
 
 type DbSession struct {
 	db          *ZDb
+	tx          *sql.Tx
+	beginTx     bool
 	tableName   string
 	fieldName   []string
 	placeHolder []string
@@ -84,7 +86,12 @@ func (session *DbSession) Insert(data any) (int64, int64, error) {
 	}
 	query := fmt.Sprintf("insert into %s (%s) values (%s)", session.tableName, strings.Join(session.fieldName, ","), strings.Join(session.placeHolder, ","))
 	session.db.logger.Info(query)
-	stmt, err := session.db.db.Prepare(query)
+	var stmt *sql.Stmt
+	if session.beginTx {
+		stmt, err = session.tx.Prepare(query)
+	} else {
+		stmt, err = session.db.db.Prepare(query)
+	}
 	if err != nil {
 		return -1, -1, err
 	}
@@ -589,6 +596,34 @@ func (session *DbSession) Count() (int64, error) {
 
 func (session *DbSession) Aggregate() (int64, error) {
 	return 0, nil
+}
+
+func (session *DbSession) Begin() error {
+	tx, err := session.db.db.Begin()
+	if err != nil {
+		return err
+	}
+	session.tx = tx
+	session.beginTx = true
+	return nil
+}
+
+func (session *DbSession) Commit() error {
+	err := session.tx.Commit()
+	if err != nil {
+		return err
+	}
+	session.beginTx = false
+	return nil
+}
+
+func (session *DbSession) Rollback() error {
+	err := session.tx.Rollback()
+	if err != nil {
+		return err
+	}
+	session.beginTx = false
+	return nil
 }
 
 func (session *DbSession) Exec(sql string, values ...any) (int64, error) {
