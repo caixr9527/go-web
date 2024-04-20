@@ -216,9 +216,9 @@ func (e *Engine) httpRequestHandler(ctx *Context, w http.ResponseWriter, r *http
 	fmt.Fprintf(w, "%s not found \n", r.RequestURI)
 }
 
-func (e *Engine) Run() {
+func (e *Engine) Run(addr string) {
 	http.Handle("/", e)
-	err := http.ListenAndServe(":8111", nil)
+	err := http.ListenAndServe(addr, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
