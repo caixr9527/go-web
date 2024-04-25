@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/gob"
 	"encoding/json"
 	"github.com/caixr9527/goodscenter/model"
 	"github.com/caixr9527/ordercenter/api"
 	"github.com/caixr9527/ordercenter/service"
 	"github.com/caixr9527/zorm"
 	"github.com/caixr9527/zorm/rpc"
+	"log"
 	"net/http"
 )
 
@@ -44,6 +46,19 @@ func main() {
 		apiClient := api.NewGoodsApiClient(client.Conn)
 		goodsResponse, err := apiClient.Find(context.Background(), &api.GoodsRequest{})
 		ctx.JSON(http.StatusOK, goodsResponse)
+	})
+
+	group.Get("/findTcp", func(ctx *zorm.Context) {
+		gob.Register(&model.Result{})
+		gob.Register(&model.Goods{})
+		option := rpc.DefaultOption
+		option.SerializerType = rpc.Gob
+		proxy := rpc.NewTcpClientProxy(option)
+		params := make([]any, 1)
+		params[0] = int64(1)
+		result, err := proxy.Call(context.Background(), "goods", "Find", params)
+		log.Println(err)
+		ctx.JSON(http.StatusOK, result)
 	})
 	engine.Run(":9003")
 }

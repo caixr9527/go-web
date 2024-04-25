@@ -7,7 +7,7 @@ type GoodsRpcService struct {
 
 func (*GoodsRpcService) Find(id int64) *model.Result {
 	goods := model.Goods{
-		Id:   1000,
+		Id:   id,
 		Name: "goods center",
 	}
 	return &model.Result{
