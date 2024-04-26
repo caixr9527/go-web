@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/caixr9527/zorm/register"
 	"github.com/golang/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 	"io"
@@ -161,14 +162,16 @@ type MsgTcpServer struct {
 	serviceMap map[string]any
 }
 
-func NewTcpServer(addr string) (*MsgTcpServer, error) {
-	listen, err := net.Listen("tcp", addr)
+func NewTcpServer(host string, port int) (*MsgTcpServer, error) {
+	listen, err := net.Listen("tcp", fmt.Sprintf("%s:%d", host, port))
 	if err != nil {
 		return nil, err
 	}
 	return &MsgTcpServer{
 		listen:     listen,
 		serviceMap: make(map[string]any),
+		Host:       host,
+		Port:       port,
 	}, nil
 }
 
@@ -178,6 +181,16 @@ func (s *MsgTcpServer) Register(name string, service interface{}) {
 		panic("service must be pointer")
 	}
 	s.serviceMap[name] = service
+	client, err := register.CreateNacosClient()
+	if err != nil {
+		//todo
+		panic(err)
+	}
+	err = register.Register(client, name, s.Host, uint64(s.Port))
+	if err != nil {
+		//todo
+		panic(err)
+	}
 }
 
 type MsgTcpConn struct {

@@ -32,7 +32,7 @@ func main() {
 	//})
 	//err := server.Run()
 	//log.Println(err)
-	tcpServer, err := rpc.NewTcpServer(":9222")
+	tcpServer, err := rpc.NewTcpServer("127.0.0.1", 9222)
 	log.Println(err)
 	gob.Register(&model.Result{})
 	gob.Register(&model.Goods{})
