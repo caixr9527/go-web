@@ -501,8 +501,9 @@ type RpcClient interface {
 	Close() error
 }
 type TcpClient struct {
-	conn   net.Conn
-	option TcpClientOption
+	conn        net.Conn
+	option      TcpClientOption
+	ServiceName string
 }
 
 type TcpClientOption struct {
@@ -528,7 +529,15 @@ func NewTcpClient(option TcpClientOption) *TcpClient {
 }
 
 func (c *TcpClient) Connect() error {
-	addr := fmt.Sprintf("%s:%d", c.option.Host, c.option.Port)
+	client, err := register.CreateNacosClient()
+	if err != nil {
+		return err
+	}
+	ip, port, err := register.GetInstance(client, c.ServiceName)
+	if err != nil {
+		return err
+	}
+	addr := fmt.Sprintf("%s:%d", ip, port)
 	conn, err := net.DialTimeout("tcp", addr, c.option.ConnectionTimeout)
 	if err != nil {
 		return err
@@ -658,6 +667,7 @@ func NewTcpClientProxy(option TcpClientOption) *TcpClientProxy {
 func (p *TcpClientProxy) Call(ctx context.Context, serviceName string, methodName string, args []any) (any, error) {
 	client := NewTcpClient(p.option)
 	p.client = client
+	client.ServiceName = serviceName
 	err := client.Connect()
 	if err != nil {
 		return nil, err

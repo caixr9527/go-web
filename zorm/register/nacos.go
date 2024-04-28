@@ -53,3 +53,19 @@ func Register(client naming_client.INamingClient, serviceName string, ip string,
 	})
 	return err
 }
+
+func GetInstance(client naming_client.INamingClient, serviceName string) (string, uint64, error) {
+	instance, err := client.SelectOneHealthyInstance(vo.SelectOneHealthInstanceParam{
+		ServiceName: serviceName,
+		//ClusterName: "cluster-a",
+		//GroupName:   "group-a",
+	})
+	if err != nil {
+		return "", 0, err
+	}
+	return instance.Ip, instance.Port, nil
+}
+
+type NacosRegister struct {
+	client naming_client.INamingClient
+}
