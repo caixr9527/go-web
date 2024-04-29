@@ -1,12 +1,8 @@
 package main
 
 import (
-	"encoding/gob"
 	"github.com/caixr9527/goodscenter/model"
-	"github.com/caixr9527/goodscenter/service"
 	"github.com/caixr9527/zorm"
-	"github.com/caixr9527/zorm/rpc"
-	"log"
 	"net/http"
 )
 
@@ -32,11 +28,12 @@ func main() {
 	//})
 	//err := server.Run()
 	//log.Println(err)
-	tcpServer, err := rpc.NewTcpServer("127.0.0.1", 9222)
-	log.Println(err)
-	gob.Register(&model.Result{})
-	gob.Register(&model.Goods{})
-	tcpServer.Register("goods", &service.GoodsRpcService{})
-	tcpServer.Run()
+	//tcpServer, err := rpc.NewTcpServer("127.0.0.1", 9222)
+	//log.Println(err)
+	//gob.Register(&model.Result{})
+	//gob.Register(&model.Goods{})
+	//tcpServer.Register("goods", &service.GoodsRpcService{})
+	//tcpServer.Run()
 	engine.Run(":9002")
+
 }
