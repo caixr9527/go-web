@@ -215,6 +215,7 @@ func (e *Engine) httpRequestHandler(ctx *Context, w http.ResponseWriter, r *http
 			return
 		}
 		gwConfig := e.gatewayConfigMap[node.GwName]
+		gwConfig.Header(ctx.R)
 		target, err := url.Parse(fmt.Sprintf("http://%s:%d%s", gwConfig.Host, gwConfig.Port, path))
 		if err != nil {
 			ctx.W.WriteHeader(http.StatusInternalServerError)

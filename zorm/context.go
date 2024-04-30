@@ -310,3 +310,7 @@ func (c *Context) SetCookie(name, value string, maxAge int, path, domain string,
 		SameSite: c.sameSite,
 	})
 }
+
+func (c *Context) GetHeader(key string) string {
+	return c.R.Header.Get(key)
+}
