@@ -13,6 +13,7 @@ import (
 
 func main() {
 	engine := zorm.Default()
+	engine.Use(zorm.Limiter(1, 1))
 	group := engine.Group("goods")
 	group.Get("/find", func(ctx *zorm.Context) {
 		fmt.Println(ctx.GetHeader("my"))

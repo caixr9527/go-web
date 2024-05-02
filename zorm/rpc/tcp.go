@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"github.com/caixr9527/zorm/register"
 	"github.com/golang/protobuf/proto"
+	"golang.org/x/time/rate"
 	"google.golang.org/protobuf/types/known/structpb"
 	"io"
 	"log"
@@ -160,6 +161,7 @@ type MsgTcpServer struct {
 	Port       int
 	NetWork    string
 	serviceMap map[string]any
+	Limiter    *rate.Limiter
 }
 
 func NewTcpServer(host string, port int) (*MsgTcpServer, error) {
@@ -173,6 +175,10 @@ func NewTcpServer(host string, port int) (*MsgTcpServer, error) {
 		Host:       host,
 		Port:       port,
 	}, nil
+}
+
+func (s *MsgTcpServer) SetLimiter(limit, cap int) {
+	s.Limiter = rate.NewLimiter(rate.Limit(limit), cap)
 }
 
 func (s *MsgTcpServer) Register(name string, service interface{}) {
@@ -280,7 +286,17 @@ func (s *MsgTcpServer) readHandler(conn *MsgTcpConn) {
 			conn.conn.Close()
 		}
 	}()
-
+	// todo 可以优化
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(1)*time.Second)
+	defer cancel()
+	err := s.Limiter.WaitN(ctx, 1)
+	if err != nil {
+		rsp := &MsgRpcResponse{}
+		rsp.Code = 403
+		rsp.Msg = err.Error()
+		conn.rspChan <- rsp
+		return
+	}
 	msg, err := decodeFrame(conn.conn)
 	if err != nil {
 		rsp := &MsgRpcResponse{}
