@@ -1,6 +1,7 @@
 package breaker
 
 import (
+	"errors"
 	"sync"
 	"time"
 )
@@ -53,6 +54,7 @@ type Settings struct {
 	ReadyToTrip   func(counts Counts) bool
 	OnStateChange func(name string, from Stat, to Stat)
 	IsSuccessful  func(err error) bool
+	Fallback      func(err error) (any, error)
 }
 
 type CircuitBreaker struct {
@@ -68,25 +70,35 @@ type CircuitBreaker struct {
 	state      Stat
 	generation uint64
 	counts     Counts
-	expiry     time.Time
+	expiry     time.Time // todo 时间设置有问题
+	Fallback   func(err error) (any, error)
 }
 
 func (cb *CircuitBreaker) NewGeneration() {
+	cb.mutex.Lock()
+	defer cb.mutex.Unlock()
 	cb.generation++
 	cb.counts.Clear()
+	var zero time.Time
 	switch cb.state {
 	case Closed:
-		cb.expiry = time.Now().Add(cb.interval)
+		if cb.interval == 0 {
+			cb.expiry = zero
+
+		} else {
+			cb.expiry = time.Now().Add(cb.interval)
+		}
 	case Open:
 		cb.expiry = time.Now().Add(cb.timeout)
 	case HalfOpen:
-		cb.expiry = time.Now()
+		cb.expiry = zero
 	}
 }
 
 func NewCircuitBreaker(st Settings) *CircuitBreaker {
 	cb := &CircuitBreaker{}
 	cb.onStateChange = st.OnStateChange
+	cb.Fallback = st.Fallback
 	if st.MaxRequests == 0 {
 		cb.maxRequests = 1
 	} else {
@@ -121,27 +133,100 @@ func NewCircuitBreaker(st Settings) *CircuitBreaker {
 }
 
 func (cb *CircuitBreaker) Execute(req func() (any, error)) (any, error) {
-	err := cb.beforeRequest()
+	err, generation := cb.beforeRequest()
 	if err != nil {
+		// 降级
+		if cb.Fallback != nil {
+			return cb.Fallback(err)
+		}
 		return nil, err
 	}
 	result, err := req()
 	cb.counts.OnRequest()
 
-	err = cb.afterRequest(cb.isSuccessful(err))
+	cb.afterRequest(generation, cb.isSuccessful(err))
 	return result, err
 
 }
 
-func (cb *CircuitBreaker) beforeRequest() error {
-	return nil
+func (cb *CircuitBreaker) beforeRequest() (error, uint64) {
+	now := time.Now()
+	state, generation := cb.currentState(now)
+	if state == Open {
+		// todo
+		return errors.New("断路器为打开状态"), generation
+	}
+	if state == HalfOpen {
+		if cb.counts.Requests > cb.maxRequests {
+			// todo
+			return errors.New("请求数量过多"), generation
+		}
+	}
+	return nil, generation
 }
 
-func (cb *CircuitBreaker) afterRequest(success bool) error {
-	if success {
-		cb.counts.OnSuccess()
-	} else {
-		cb.counts.OnFail()
+func (cb *CircuitBreaker) afterRequest(before uint64, success bool) {
+	now := time.Now()
+	state, generation := cb.currentState(now)
+	if generation != before {
+		return
 	}
-	return nil
+	if success {
+		cb.OnSuccess(state)
+	} else {
+		cb.OnFail(state)
+	}
+}
+
+func (cb *CircuitBreaker) currentState(now time.Time) (Stat, uint64) {
+	switch cb.state {
+	case Closed:
+		if !cb.expiry.IsZero() && cb.expiry.Before(now) {
+			cb.NewGeneration()
+		}
+	case Open:
+		if cb.expiry.Before(now) {
+			cb.SetState(HalfOpen)
+		}
+	}
+	return cb.state, cb.generation
+}
+
+func (cb *CircuitBreaker) SetState(target Stat) {
+	if cb.state == target {
+		return
+	}
+	before := cb.state
+	cb.state = target
+	cb.NewGeneration()
+	if cb.onStateChange == nil {
+		cb.onStateChange(cb.name, before, target)
+	}
+}
+
+func (cb *CircuitBreaker) OnSuccess(state Stat) {
+	switch state {
+	case Closed:
+		cb.counts.OnSuccess()
+	case HalfOpen:
+		cb.counts.OnSuccess()
+		if cb.counts.ConsecutiveSuccesses > cb.maxRequests {
+			cb.SetState(Closed)
+		}
+	}
+}
+
+func (cb *CircuitBreaker) OnFail(state Stat) {
+	switch state {
+	case Closed:
+		cb.counts.OnFail()
+		if cb.readyToTrip(cb.counts) {
+			cb.SetState(Open)
+		}
+	case HalfOpen:
+		cb.counts.OnFail()
+		if cb.readyToTrip(cb.counts) {
+			cb.SetState(Open)
+		}
+	}
 }

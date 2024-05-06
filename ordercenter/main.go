@@ -20,7 +20,7 @@ func main() {
 	group := engine.Group("order")
 	group.Get("/find", func(ctx *zorm.Context) {
 		params := make(map[string]any)
-		params["id"] = 1000
+		params["id"] = ctx.GetQuery("id")
 		params["name"] = "1000"
 		//body, err := client.Get("http://localhost:9002/goods/find", params)
 		//if err != nil {
